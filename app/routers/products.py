@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List
 from .. import crud, models, schemas
 from ..database import get_db
-
 router = APIRouter()
 
 # List all products

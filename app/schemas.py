@@ -2,6 +2,58 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
 
+# AUTH
+
+class UserBase(BaseModel):
+    username: str
+    email: str
+
+class UserCreate(UserBase):
+    password: str
+
+class User(UserBase):
+    id: int
+    is_active: bool
+    is_admin: bool
+
+    class Config:
+        orm_mode = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# PERMISSION
+class PermissionBase(BaseModel):
+    name: str
+
+class PermissionCreate(PermissionBase):
+    pass
+
+class Permission(PermissionBase):
+    id: int
+    name: str
+    
+    class Config:
+        orm_mode = True
+
+# ROLES
+class RoleBase(BaseModel):
+    name: str
+
+class RoleCreate(RoleBase):
+    pass
+
+class Role(RoleBase):
+    id: int
+    permissions: List[Permission] = []
+
+    class Config:
+        orm_mode = True
+
 # CLIENTS
 class ClientBase(BaseModel):
     name: str

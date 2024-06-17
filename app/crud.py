@@ -3,9 +3,97 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from . import models, schemas
+from .security import get_password_hash
 import logging
 
 logger = logging.getLogger(__name__)
+
+# AUTH
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username).first()
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
+
+def create_user(db: Session, user: schemas.UserCreate, role_id: int):
+    hashed_password = get_password_hash(user.password)
+    db_user = models.User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_password,
+        role_id=role_id  # Aqui você associa o usuário ao grupo específico
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+# USERS
+# def create_user(db: Session, username: str, email: str, hashed_password: str, role_id: int):
+def create_user(db: Session, username: str, email: str, hashed_password: str):
+    # user = models.User(username=username, email=email, hashed_password=hashed_password, role_id=role_id)
+    user = models.User(username=username, email=email, hashed_password=hashed_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+def get_user(db: Session, user_id: int):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+def get_users(db: Session, skip: int = 0, limit: int = 10):
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username).first()
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
+
+# ROLES
+def create_role(db: Session, name: str):
+    role = models.Role(name=name)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
+
+def get_role_by_id(db: Session, role_id: int):
+    return db.query(models.Role).filter(models.Role.id == role_id).first()
+
+def get_role(db: Session, skip: int = 0, limit: int = 10):
+    return db.query(models.Role).offset(skip).limit(limit).all()
+
+def get_role_by_name(db: Session, name: str):
+    return db.query(models.Role).filter(models.Role.name == name).first()
+
+# litando os usuarios deu um grupo
+def get_users_by_role_id(db: Session, role_id: int):
+    return db.query(models.User).filter(models.User.role_id == role_id).all()
+
+# PERMISSIONS
+def create_permission(db: Session, name: str):
+    permission = models.Permission(name=name)
+    db.add(permission)
+    db.commit()
+    db.refresh(permission)
+    return permission
+
+def get_permission_by_id(db: Session, permission_id: int):
+    return db.query(models.Permission).filter(models.Permission.id == permission_id).first()
+
+def get_permissions(db: Session, skip: int = 0, limit: int = 10):
+    return db.query(models.Permission).offset(skip).limit(limit).all()
+
+def get_permission_by_name(db: Session, name: str):
+    return db.query(models.Permission).filter(models.Permission.name == name).first()
+
+# permissões de um grupo específico
+def get_permissions_by_role_id(db: Session, role_id: int):
+    role = db.query(models.Role).filter(models.Role.id == role_id).first()
+    if not role:
+        return None
+    return role.permissions
 
 # PRODUCTS
 def get_clients(db: Session, skip: int = 0, limit: int = 10):

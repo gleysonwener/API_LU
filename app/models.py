@@ -1,9 +1,31 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Float, DateTime, Numeric, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, Float, DateTime, Numeric, Boolean, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from passlib.context import CryptContext
+import bcrypt
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    
+    def verify_password(self, password: str):
+        return pwd_context.verify(password, self.hashed_password)
+
+    def set_password(self, password: str):
+        self.hashed_password = pwd_context.hash(password)
+
 
 class Client(Base):
     __tablename__ = "clients"
