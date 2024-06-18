@@ -1,9 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
 from app import crud, models, schemas
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
+from passlib.context import CryptContext
+from app.security import criar_token_jwt, get_current_user, oauth2_scheme
+import bcrypt
+from datetime import datetime, timedelta
+from app.models import User, funcoes_validas
+from typing import List
+import json
 
 router = APIRouter()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_db():
     db = SessionLocal()
@@ -12,46 +21,83 @@ def get_db():
     finally:
         db.close()
 
-# listar permissões
-@router.get("/permissions/", response_model=list[schemas.Permission])
-def list_permissions(db: Session = Depends(get_db)):
-    permissions = crud.get_permissions(db)
-    return permissions
 
+@router.post("/{user_id}/funcoes/{funcao}", response_model=schemas.UserFuncoesResponse)
+async def add_funcao_usuario(user_id: int, funcao: str, db: Session = Depends(get_db)):
+    usuario = crud.get_user(db, user_id=user_id)
+    if usuario is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
 
-# criar nova permissão
-@router.post("/permissions/", response_model=schemas.Permission)
-def create_permission(name: str, db: Session = Depends(get_db)):
-    existing_permission = crud.create_permission(db, name)
-    if existing_permission:
-        raise HTTPException(status_code=400, detail="Permission already exists")
-    
-    permission = crud.create_permission(db, name=name)
-    return permission
+    # Verifica se a função a ser adicionada está na lista de funções válidas
+    if funcao not in funcoes_validas:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"A função {funcao} não é uma função válida")
 
+    # Converte a string de funções em uma lista, se existir
+    funcoes_list = usuario.funcoes.split(",") if usuario.funcoes else []
 
-# associar uma permissão a um grupo de usuários
-@router.post("/permissions/{permission_id}/assign/{role_id}/")
-def assign_permission_to_role(permission_id: int, role_id: int, db: Session = Depends(get_db)):
-    permission = crud.get_permission_by_id(db, permission_id)
-    if not permission:
-        raise HTTPException(status_code=404, detail="Permission not found")
-    
-    role = crud.get_role_by_id(db, role_id)
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
-    
-    if permission in role.permissions:
-        raise HTTPException(status_code=400, detail="Permission already assigned to role")
-    
-    role.permissions.append(permission)
+    # Verifica se a função já está atribuída ao usuário
+    if funcao in funcoes_list:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"A função {funcao} já está atribuída ao usuário")
+
+    # Adiciona a nova função à lista de funções
+    funcoes_list.append(funcao)
+    usuario.funcoes = ",".join(funcoes_list)
+
     db.commit()
-    return {"message": "Permission assigned to role successfully"}
 
-# lista permissões de um grupo específico
-@router.get("/roles/{role_id}/permissions/", response_model=list[schemas.Permission])
-def list_permissions_by_role(role_id: int, db: Session = Depends(get_db)):
-    permissions = crud.get_permissions_by_role_id(db, role_id)
-    if not permissions:
-        raise HTTPException(status_code=404, detail="Permissions not found")
-    return permissions
+    # Retorna o usuário com as funções atualizadas como lista
+    return schemas.UserFuncoesResponse(
+        id=usuario.id,
+        username=usuario.username,
+        email=usuario.email,
+        is_active=usuario.is_active,
+        is_admin=usuario.is_admin,
+        funcoes=funcoes_list  # Retorna a lista de funções diretamente
+    )
+
+
+
+
+@router.delete("/{user_id}/funcoes/{funcao}")
+async def remove_funcao_usuario(
+    user_id: int,
+    funcao: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        usuario = crud.get_user(db, user_id=user_id)
+        if usuario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+        
+        # Verifica se usuario.funcoes não é None e não está vazio
+        if not usuario.funcoes:
+            usuario.funcoes = []
+
+        # Converte a string de funções separadas por vírgula em uma lista
+        funcoes_list = usuario.funcoes.split(',') if isinstance(usuario.funcoes, str) else usuario.funcoes
+
+        # Verifica se a função está na lista de funções
+        if funcao not in funcoes_list:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"A função {funcao} não encontrada para o usuário")
+        
+        # Remove a função da lista
+        funcoes_list.remove(funcao)
+
+        # Converte a lista de volta para uma string separada por vírgula, se necessário
+        usuario.funcoes = ','.join(funcoes_list) if isinstance(usuario.funcoes, str) else funcoes_list
+
+        # Commit no banco de dados para atualizar as alterações
+        db.commit()
+        
+        # Atualize o objeto de usuário após o commit
+        db.refresh(usuario)
+
+    except Exception as e:
+        # Se houver um erro ao commitar, faça o rollback
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    finally:
+        # Sempre feche a conexão com o banco de dados
+        db.close()
+
+    return usuario

@@ -5,7 +5,6 @@ from passlib.context import CryptContext
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
-from typing import Optional
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,10 @@ from .database import SessionLocal
 from . import models
 from .schemas import TokenData
 from fastapi.security import HTTPBearer
+from typing import List
+
+from .models import User
+import logging
 
 oauth2_scheme = HTTPBearer()
 
@@ -48,19 +51,8 @@ def decode_token(token: str) -> dict:
     except jwt.JWTError:
         return None
 
-def get_current_user(db: Session = Depends(SessionLocal), token: str = Depends(oauth2_scheme)):
-    payload = decode_token(token.credentials)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    username: str = payload.get("sub")
-    user = db.query(models.User).filter(models.User.username == username).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
-
-
 # def get_current_user(db: Session = Depends(SessionLocal), token: str = Depends(oauth2_scheme)):
-#     payload = decode_token(token)
+#     payload = decode_token(token.credentials)
 #     if payload is None:
 #         raise HTTPException(status_code=401, detail="Invalid token")
 #     username: str = payload.get("sub")
@@ -69,35 +61,37 @@ def get_current_user(db: Session = Depends(SessionLocal), token: str = Depends(o
 #         raise HTTPException(status_code=401, detail="User not found")
 #     return user
 
-# def get_current_user(db: Session = Depends(SessionLocal), token: str = Depends(oauth2_scheme)):
-#     try:
-#         payload = decode_token(token)
-#         if payload is None:
-#             raise HTTPException(status_code=401, detail="Invalid token")
-        
-#         username: str = payload.get("sub")
-#         user = db.query(models.User).filter(models.User.username == username).first()
-        
-#         if user is None:
-#             raise HTTPException(status_code=401, detail="User not found")
-        
-#         return user
-    
-#     except Exception as e:
-#         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
-# def verify_token(token: str):
-#     credentials_exception = HTTPException(
-#         status_code=status.HTTP_401_UNAUTHORIZED,
-#         detail="Could not validate credentials",
-#         headers={"WWW-Authenticate": "Bearer"},
-#     )
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-#         username: str = payload.get("sub")
-#         if username is None:
-#             raise credentials_exception
-#         token_data = TokenData(username=username)
-#         return token_data
-#     except JWTError:
-#         raise credentials_exception
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+        
+def get_current_user(db: Session = Depends(SessionLocal), token: str = Depends(oauth2_scheme)):
+    payload = decode_token(token)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    username: str = payload.get("sub")
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+
+def get_user_com_funcao(funcoes: List[str] = []):
+    def inner(usuario_logado: User = Depends(get_current_user)) -> User:
+        if not len(funcoes):
+            return usuario_logado
+        
+        for funcao in funcoes:
+            if funcao in usuario_logado.funcoes.split(','):
+                return usuario_logado
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="O usuário não possui permissão para realizar essa ação!"
+        )
+    return inner

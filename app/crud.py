@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from . import models, schemas
 from .security import get_password_hash
+from sqlalchemy.exc import IntegrityError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,9 +30,7 @@ def create_user(db: Session, user: schemas.UserCreate, role_id: int):
     return db_user
 
 # USERS
-# def create_user(db: Session, username: str, email: str, hashed_password: str, role_id: int):
 def create_user(db: Session, username: str, email: str, hashed_password: str):
-    # user = models.User(username=username, email=email, hashed_password=hashed_password, role_id=role_id)
     user = models.User(username=username, email=email, hashed_password=hashed_password)
     db.add(user)
     db.commit()
@@ -49,27 +48,6 @@ def get_user_by_username(db: Session, username: str):
 
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
-
-# ROLES
-def create_role(db: Session, name: str):
-    role = models.Role(name=name)
-    db.add(role)
-    db.commit()
-    db.refresh(role)
-    return role
-
-def get_role_by_id(db: Session, role_id: int):
-    return db.query(models.Role).filter(models.Role.id == role_id).first()
-
-def get_role(db: Session, skip: int = 0, limit: int = 10):
-    return db.query(models.Role).offset(skip).limit(limit).all()
-
-def get_role_by_name(db: Session, name: str):
-    return db.query(models.Role).filter(models.Role.name == name).first()
-
-# litando os usuarios deu um grupo
-def get_users_by_role_id(db: Session, role_id: int):
-    return db.query(models.User).filter(models.User.role_id == role_id).all()
 
 # PERMISSIONS
 def create_permission(db: Session, name: str):
@@ -95,19 +73,42 @@ def get_permissions_by_role_id(db: Session, role_id: int):
         return None
     return role.permissions
 
-# PRODUCTS
+# CLIENTS
 def get_clients(db: Session, skip: int = 0, limit: int = 10):
     return db.query(models.Client).offset(skip).limit(limit).all()
 
-def create_client(db: Session, client: schemas.ClientCreate):
-    db_client = models.Client(name=client.name, email=client.email, cpf=client.cpf)
-    db.add(db_client)
-    db.commit()
-    db.refresh(db_client)
-    return db_client
+# def create_client(db: Session, client: schemas.ClientCreate):
+#     db_client = models.Client(name=client.name, email=client.email, cpf=client.cpf)
+#     db.add(db_client)
+#     db.commit()
+#     db.refresh(db_client)
+#     return db_client
 
+def create_client(db: Session, client: schemas.ClientCreate):
+    try:
+        db_client = models.Client(name=client.name, email=client.email, cpf=client.cpf)
+        db.add(db_client)
+        db.commit()
+        db.refresh(db_client)
+        return db_client
+    except IntegrityError as e:
+        db.rollback()
+        if "duplicate key value violates unique constraint" in str(e.orig):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CPF or email already registered")
+        else:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred")
+        
 def get_client(db: Session, client_id: int):
     return db.query(models.Client).filter(models.Client.id == client_id).first()
+
+def get_client_by_name(db: Session, client_name: str):
+    return db.query(models.Client).filter(models.Client.name == client_name).first()
+
+def get_client_by_email(db: Session, client_email: str):
+    return db.query(models.Client).filter(models.Client.email == client_email).first()
+
+def get_client_by_cpf(db: Session, cpf: str):
+    return db.query(models.Client).filter(models.Client.cpf == cpf).first()
 
 def update_client(db: Session, client_id: int, client_update: schemas.ClientUpdate):
     db_client = db.query(models.Client).filter(models.Client.id == client_id).first()
@@ -126,6 +127,7 @@ def delete_client(db: Session, client_id: int):
     db.delete(db_client)
     db.commit()
 
+#PRODUCTS
 def get_products(db: Session, skip: int = 0, limit: int = 10):
     return db.query(models.Product).offset(skip).limit(limit).all()
 

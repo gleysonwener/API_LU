@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Form
+from fastapi import APIRouter, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.database import SessionLocal, engine
 from passlib.context import CryptContext
-from app.security import criar_token_jwt, get_current_user, oauth2_scheme
+from app.security import criar_token_jwt, get_current_user, get_user_com_funcao, oauth2_scheme
 import bcrypt
 from datetime import datetime, timedelta
+from app.models import User
+from typing import List
+import json
+
 
 
 router = APIRouter()
@@ -20,10 +24,61 @@ def get_db():
         db.close()
 
 # lista todos os  usuários
-@router.get("/users", response_model=list[schemas.User])
-def list_users(db: Session = Depends(get_db)):
-    users = crud.get_users(db)
-    return users
+# @router.get("/users", response_model=list[schemas.User])
+# def list_users(db: Session = Depends(get_db)):
+#     users = crud.get_users(db)
+#     return users
+
+# @router.get("/users", response_model=List[schemas.User])
+# def list_users(db: Session = Depends(get_db)):
+#     users = db.query(models.User).all()
+#     return [
+#         schemas.User(
+#             id=user.id,
+#             username=user.username,
+#             email=user.email,
+#             is_active=user.is_active,
+#             is_admin=user.is_admin,
+#             funcoes=user.funcoes.split(',') if isinstance(user.funcoes, str) else user.funcoes or []
+#         )
+#         for user in users
+#     ]
+
+@router.get("/users", response_model=List[schemas.User])
+async def list_users(
+    db: Session = Depends(get_db), 
+    usuario_logado: User = Depends(get_user_com_funcao(funcoes=["admin"]))
+):
+    users = db.query(models.User).all()
+    return [
+        schemas.User(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            is_active=user.is_active,
+            is_admin=user.is_admin,
+            funcoes=user.funcoes.split(',') if isinstance(user.funcoes, str) else user.funcoes or []
+        )
+        for user in users
+    ]
+
+
+# @router.get("/users", response_model=List[schemas.User])
+# def list_users(
+#     db: Session = Depends(get_db), current_user: User = Depends(get_user_com_funcao(["admin"]))
+# ):
+#     users = db.query(models.User).all()
+#     return [
+#         schemas.User(
+#             id=user.id,
+#             username=user.username,
+#             email=user.email,
+#             is_active=user.is_active,
+#             is_admin=user.is_admin,
+#             funcoes=user.funcoes.split(',') if isinstance(user.funcoes, str) else user.funcoes or []
+#         )
+#         for user in users
+#     ]
 
 @router.post("/register/")
 def register_user(
@@ -81,3 +136,17 @@ def refresh_access_token(current_user: models.User = Depends(get_current_user)):
 def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     users = crud.get_users(db)
     return users
+
+
+
+# remover um user
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    db.delete(user)
+    db.commit()
+    return {"message": "Usuário deletado com sucesso"}
+
+

@@ -4,11 +4,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from passlib.context import CryptContext
 import bcrypt
+import pydantic
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 Base = declarative_base()
 
+
+funcoes_validas = ["admin", "usuario_regular"]
 
 class User(Base):
     __tablename__ = "users"
@@ -19,12 +22,48 @@ class User(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    # funcoes = Column(String, default="{}")
+    funcoes = Column(String)
     
     def verify_password(self, password: str):
         return pwd_context.verify(password, self.hashed_password)
 
     def set_password(self, password: str):
         self.hashed_password = pwd_context.hash(password)
+
+    # @validator('funcoes')
+    def valida_funcao_existem(cls, v):
+        if not isinstance(v, list):
+            raise ValueError(f'As funções de um usuário deve ser uma lista!')
+        for funcao in v:
+            if not isinstance(funcao, str) or funcao not in funcoes_validas:
+                raise ValueError(f'A função {funcao} não é um função válida!')
+        return v
+
+    # @validator('funcoes')
+    def remove_funcoes_duplicadas(cls, v):
+        return list(set(v))
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "is_active": self.is_active,
+            "is_admin": self.is_admin,
+            "funcoes": self.funcoes.split(",") if self.funcoes else []
+        }
+
+    @staticmethod
+    def from_dict(data):
+        return User(
+            username=data.get('username'),
+            email=data.get('email'),
+            hashed_password=data.get('hashed_password'),
+            is_active=data.get('is_active', True),
+            is_admin=data.get('is_admin', False),
+            funcoes=",".join(data.get('funcoes', []))
+        )
 
 
 class Client(Base):
@@ -93,7 +132,7 @@ class Product(Base):
     description = Column(String)
     sale_value = Column(Float)
     barcode = Column(String)
-    section = Column(String)
+    category = Column(String)
     initial_stock = Column(Integer)
     expiry_date = Column(DateTime)
     available = Column(Boolean, default=True)

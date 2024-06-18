@@ -15,6 +15,24 @@ class User(UserBase):
     id: int
     is_active: bool
     is_admin: bool
+    funcoes: List[str] = []
+
+    class Config:
+        orm_mode = True
+
+class UserBase(BaseModel):
+    id: int
+    username: str
+    email: str
+    funcoes: List[str]
+
+class UserFuncoesResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_active: bool
+    is_admin: bool
+    funcoes: List[str]
 
     class Config:
         orm_mode = True
@@ -26,33 +44,36 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
 
-# PERMISSION
-class PermissionBase(BaseModel):
-    name: str
+# # PERMISSION
+# class PermissionBase(BaseModel):
+#     name: str
 
-class PermissionCreate(PermissionBase):
-    pass
+# class PermissionCreate(PermissionBase):
+#     pass
 
-class Permission(PermissionBase):
-    id: int
-    name: str
+# class Permission(PermissionBase):
+#     id: int
+#     name: str
     
-    class Config:
-        orm_mode = True
+#     class Config:
+#         orm_mode = True
 
-# ROLES
-class RoleBase(BaseModel):
-    name: str
+# # ROLES
+# class RoleBase(BaseModel):
+#     name: str
 
-class RoleCreate(RoleBase):
-    pass
+# class RoleCreate(RoleBase):
+#     pass
 
-class Role(RoleBase):
-    id: int
-    permissions: List[Permission] = []
+# class Role(RoleBase):
+#     id: int
+#     permissions: List[Permission] = []
 
-    class Config:
-        orm_mode = True
+#     class Config:
+#         orm_mode = True
+
+
+
 
 # CLIENTS
 class ClientBase(BaseModel):
